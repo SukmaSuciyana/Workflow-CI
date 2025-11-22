@@ -128,22 +128,29 @@ jobs:
       shell: bash -l {0}
       run: |
         cd MLProject
+        
+        echo "=== Debugging MLflow structure ==="
+        echo "Full mlruns structure:"
+        find mlruns -type d | head -20
+        
         # Find experiment ID (folder with numbers only)
         EXPERIMENT_ID=$(find mlruns -maxdepth 1 -type d -name "[0-9]*" | head -1 | xargs basename)
         echo "Experiment ID: $EXPERIMENT_ID"
         
-        # Find the latest run ID within the experiment
-        RUN_ID=$(find mlruns/$EXPERIMENT_ID -maxdepth 1 -type d -name "[a-f0-9]*" | head -1 | xargs basename)
+        # Find the latest run ID within the experiment (32-character hex string)
+        # Exclude the parent directory itself
+        RUN_ID=$(find mlruns/$EXPERIMENT_ID -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
         echo "Run ID: $RUN_ID"
         
         # Verify the paths exist
         echo "Checking paths..."
-        ls -la "mlruns/$EXPERIMENT_ID/" || echo "Experiment directory not found"
-        ls -la "mlruns/$EXPERIMENT_ID/$RUN_ID/" || echo "Run directory not found"
+        ls -la "mlruns/$EXPERIMENT_ID/" 
+        ls -la "mlruns/$EXPERIMENT_ID/$RUN_ID/"
+        ls -la "mlruns/$EXPERIMENT_ID/$RUN_ID/artifacts/" || echo "No artifacts folder"
         
         echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
         echo "experiment_id=$EXPERIMENT_ID" >> $GITHUB_OUTPUT
-        echo "Found Run ID: $RUN_ID in Experiment: $EXPERIMENT_ID"
+        echo "=== Found Run ID: $RUN_ID in Experiment: $EXPERIMENT_ID ==="
 
     - name: Debug - Check model artifacts
       shell: bash -l {0}
