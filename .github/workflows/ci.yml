@@ -1,0 +1,172 @@
+name: MLflow CI/CD Pipeline
+
+on:
+  push:
+    paths:
+      - 'MLProject/modelling.py'
+      - 'MLProject/**'
+    branches:
+      - main
+  pull_request:
+    paths:
+      - 'MLProject/modelling.py'
+      - 'MLProject/**'
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  MLFLOW_TRACKING_URI: file:./mlruns
+  DOCKER_IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/mlflow-model
+  PYTHON_VERSION: '3.9'
+
+jobs:
+  train-model:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: ${{ env.PYTHON_VERSION }}
+        miniconda-version: "latest"
+
+    - name: Install MLflow and dependencies
+      shell: bash -l {0}
+      run: |
+        conda install -c conda-forge mlflow scikit-learn pandas numpy joblib -y
+        pip install mlflow scikit-learn pandas numpy joblib
+
+    - name: Run MLflow project
+      shell: bash -l {0}
+      run: |
+        cd MLProject
+        mlflow run . --no-conda
+      continue-on-error: false
+
+    - name: List MLflow artifacts
+      shell: bash -l {0}
+      run: |
+        cd MLProject
+        ls -la mlruns/
+        find mlruns/ -name "*.pkl" -o -name "model.pkl" -o -name "MLmodel"
+
+    - name: Upload MLflow artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: mlflow-artifacts
+        path: MLProject/mlruns/
+        retention-days: 30
+
+    - name: Commit and push MLflow artifacts to repo
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add MLProject/mlruns/ || true
+        git commit -m "Add MLflow artifacts from run [skip ci]" || echo "No changes to commit"
+        git push || echo "No changes to push"
+      continue-on-error: true
+
+  build-docker:
+    needs: train-model
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download MLflow artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: mlflow-artifacts
+        path: MLProject/mlruns/
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        python-version: ${{ env.PYTHON_VERSION }}
+        miniconda-version: "latest"
+
+    - name: Install MLflow
+      shell: bash -l {0}
+      run: |
+        conda install -c conda-forge mlflow -y
+        pip install mlflow
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    - name: Find latest model run
+      id: find-run
+      shell: bash -l {0}
+      run: |
+        cd MLProject
+        RUN_ID=$(find mlruns -name "meta.yaml" -type f | head -1 | xargs dirname | xargs basename)
+        EXPERIMENT_ID=$(find mlruns -maxdepth 1 -type d -name "[0-9]*" | head -1 | xargs basename)
+        echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+        echo "experiment_id=$EXPERIMENT_ID" >> $GITHUB_OUTPUT
+        echo "Found Run ID: $RUN_ID in Experiment: $EXPERIMENT_ID"
+
+    - name: Build Docker image with MLflow
+      shell: bash -l {0}
+      run: |
+        cd MLProject
+        mlflow models build-docker \
+          -m "mlruns/${{ steps.find-run.outputs.experiment_id }}/${{ steps.find-run.outputs.run_id }}/artifacts/model" \
+          -n "${{ env.DOCKER_IMAGE_NAME }}:latest" \
+          --enable-mlserver
+      continue-on-error: true
+
+    - name: Build Docker image with MLflow (fallback without mlserver)
+      if: failure()
+      shell: bash -l {0}
+      run: |
+        cd MLProject
+        mlflow models build-docker \
+          -m "mlruns/${{ steps.find-run.outputs.experiment_id }}/${{ steps.find-run.outputs.run_id }}/artifacts/model" \
+          -n "${{ env.DOCKER_IMAGE_NAME }}:latest"
+
+    - name: Tag Docker image with version
+      run: |
+        docker tag ${{ env.DOCKER_IMAGE_NAME }}:latest ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+
+    - name: Push Docker images to Docker Hub
+      run: |
+        docker push ${{ env.DOCKER_IMAGE_NAME }}:latest
+        docker push ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}
+
+    - name: Create deployment info
+      run: |
+        echo "Docker Image: ${{ env.DOCKER_IMAGE_NAME }}:latest" > deployment-info.txt
+        echo "Docker Image (SHA): ${{ env.DOCKER_IMAGE_NAME }}:${{ github.sha }}" >> deployment-info.txt
+        echo "Run ID: ${{ steps.find-run.outputs.run_id }}" >> deployment-info.txt
+        echo "Experiment ID: ${{ steps.find-run.outputs.experiment_id }}" >> deployment-info.txt
+        echo "Timestamp: $(date)" >> deployment-info.txt
+
+    - name: Upload deployment info
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-info
+        path: deployment-info.txt
