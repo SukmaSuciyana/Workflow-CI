@@ -24,6 +24,7 @@ def load_data(data_path):
     
     return X_train, X_test, y_train, y_test
 
+
 def train_model_with_autolog():
     """Train model using MLflow autolog"""
     
