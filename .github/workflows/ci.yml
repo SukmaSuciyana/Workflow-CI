@@ -134,24 +134,28 @@ jobs:
         echo "experiment_id=$EXPERIMENT_ID" >> $GITHUB_OUTPUT
         echo "Found Run ID: $RUN_ID in Experiment: $EXPERIMENT_ID"
 
-    - name: Build Docker image with MLflow
+    - name: Debug - Check model artifacts
       shell: bash -l {0}
       run: |
         cd MLProject
-        mlflow models build-docker \
-          -m "mlruns/${{ steps.find-run.outputs.experiment_id }}/${{ steps.find-run.outputs.run_id }}/artifacts/model" \
-          -n "${{ env.DOCKER_IMAGE_NAME }}:latest" \
-          --enable-mlserver
-      continue-on-error: true
+        echo "Listing model artifacts:"
+        ls -la "mlruns/${{ steps.find-run.outputs.experiment_id }}/${{ steps.find-run.outputs.run_id }}/artifacts/" || echo "Artifacts directory not found"
+        if [ -d "mlruns/${{ steps.find-run.outputs.experiment_id }}/${{ steps.find-run.outputs.run_id }}/artifacts/model" ]; then
+          echo "Model directory found!"
+          ls -la "mlruns/${{ steps.find-run.outputs.experiment_id }}/${{ steps.find-run.outputs.run_id }}/artifacts/model/"
+        else
+          echo "Model directory NOT found!"
+          exit 1
+        fi
 
-    - name: Build Docker image with MLflow (fallback without mlserver)
-      if: failure()
+    - name: Build Docker image with MLflow (without mlserver)
       shell: bash -l {0}
       run: |
         cd MLProject
         mlflow models build-docker \
           -m "mlruns/${{ steps.find-run.outputs.experiment_id }}/${{ steps.find-run.outputs.run_id }}/artifacts/model" \
           -n "${{ env.DOCKER_IMAGE_NAME }}:latest"
+      continue-on-error: false
 
     - name: Verify Docker image exists
       run: |
