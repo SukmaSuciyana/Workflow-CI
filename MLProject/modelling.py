@@ -35,8 +35,21 @@ def train_model():
     # Set experiment
     mlflow.set_experiment("pipe_condition_classification_basic")
     
-    # Load data
-    data_path = Path(__file__).parent / 'preprocessed_data_auto'
+    # Load data - check multiple possible locations
+    script_dir = Path(__file__).parent
+    
+    # Try MLProject/preprocessed_data_auto first (local development)
+    data_path = script_dir / 'preprocessed_data_auto'
+    if not data_path.exists():
+        # Try parent directory (GitHub Actions)
+        data_path = script_dir.parent / 'preprocessed_data_auto'
+    
+    if not data_path.exists():
+        raise FileNotFoundError(f"Data directory not found at {data_path}")
+    
+    print(f"Loading data from: {data_path}")
+    sys.stdout.flush()
+    
     X_train, X_test, y_train, y_test = load_data(data_path)
     
     print("Data loaded successfully!")
