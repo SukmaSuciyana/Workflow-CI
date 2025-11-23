@@ -187,87 +187,47 @@ jobs:
         cd MLProject
         
         echo "=== Debugging MLflow structure ==="
-        echo "Current directory: $(pwd)"
-        echo ""
         echo "Full mlruns structure:"
-        find mlruns -type d 2>/dev/null | head -30
+        find mlruns -type d | head -30
         echo ""
         echo "Looking for model artifacts:"
-        find mlruns -name "MLmodel" -type f 2>/dev/null
+        find mlruns -name "MLmodel" -type f
         echo ""
-        echo "Looking for model directories:"
-        find mlruns -type d -name "model" 2>/dev/null
-        echo ""
-        
-        # Check if mlruns exists and has content
-        if [ ! -d "mlruns" ] || [ -z "$(ls -A mlruns 2>/dev/null)" ]; then
-          echo "ERROR: mlruns directory is empty or doesn't exist!"
-          ls -la
-          exit 1
-        fi
         
         # Use Python to get the correct run info from MLflow
         python << 'PYTHON_SCRIPT'
-import mlflow
-import os
-import sys
-
-try:
-    mlflow.set_tracking_uri("file:./mlruns")
-    
-    # Get the experiment
-    experiments = mlflow.search_experiments()
-    if not experiments:
-        print("ERROR: No experiments found!")
-        print("Checking directory structure...")
-        os.system("ls -la mlruns/")
-        sys.exit(1)
-    
-    experiment = experiments[0]
-    print(f"Experiment ID: {experiment.experiment_id}")
-    print(f"Experiment Name: {experiment.name}")
-    
-    # Get the latest run
-    runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], max_results=1, order_by=["start_time DESC"])
-    
-    if runs.empty:
-        print("ERROR: No runs found!")
-        sys.exit(1)
-    
-    run_id = runs.iloc[0]['run_id']
-    print(f"Run ID: {run_id}")
-    
-    # Verify model path exists
-    model_path = f"mlruns/{experiment.experiment_id}/{run_id}/artifacts/model"
-    print(f"Checking model path: {model_path}")
-    
-    if os.path.exists(model_path):
-        print(f"✓ Model directory exists!")
-        print(f"Contents:")
-        os.system(f"ls -la {model_path}")
-    else:
-        print(f"✗ Model directory NOT found at: {model_path}")
-        print("Searching for model in run artifacts...")
-        artifacts_path = f"mlruns/{experiment.experiment_id}/{run_id}/artifacts"
-        if os.path.exists(artifacts_path):
-            print(f"Artifacts directory exists, contents:")
-            os.system(f"ls -la {artifacts_path}")
-            os.system(f"find {artifacts_path} -name 'model*'")
-        sys.exit(1)
-    
-    # Write to output file for GitHub Actions
-    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-        f.write(f"experiment_id={experiment.experiment_id}\n")
-        f.write(f"run_id={run_id}\n")
-    
-    print(f"\n=== SUCCESS: Found Run ID: {run_id} in Experiment: {experiment.experiment_id} ===")
-    
-except Exception as e:
-    print(f"ERROR in Python script: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-PYTHON_SCRIPT
+        import mlflow
+        import os
+        
+        mlflow.set_tracking_uri("file:./mlruns")
+        
+        # Get the experiment
+        experiments = mlflow.search_experiments()
+        if not experiments:
+            print("No experiments found!")
+            exit(1)
+        
+        experiment = experiments[0]
+        print(f"Experiment ID: {experiment.experiment_id}")
+        print(f"Experiment Name: {experiment.name}")
+        
+        # Get the latest run
+        runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], max_results=1, order_by=["start_time DESC"])
+        
+        if runs.empty:
+            print("No runs found!")
+            exit(1)
+        
+        run_id = runs.iloc[0]['run_id']
+        print(f"Run ID: {run_id}")
+        
+        # Write to output file for GitHub Actions
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"experiment_id={experiment.experiment_id}\n")
+            f.write(f"run_id={run_id}\n")
+        
+        print(f"=== Found Run ID: {run_id} in Experiment: {experiment.experiment_id} ===")
+        PYTHON_SCRIPT
 
     - name: Debug - Check model artifacts
       shell: bash -l {0}
