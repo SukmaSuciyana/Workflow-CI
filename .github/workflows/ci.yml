@@ -131,26 +131,46 @@ jobs:
         
         echo "=== Debugging MLflow structure ==="
         echo "Full mlruns structure:"
-        find mlruns -type d | head -20
+        find mlruns -type d | head -30
+        echo ""
+        echo "Looking for model artifacts:"
+        find mlruns -name "MLmodel" -type f
+        echo ""
         
-        # Find experiment ID (folder with numbers only)
-        EXPERIMENT_ID=$(find mlruns -maxdepth 1 -type d -name "[0-9]*" | head -1 | xargs basename)
-        echo "Experiment ID: $EXPERIMENT_ID"
+        # Use Python to get the correct run info from MLflow
+        python << 'PYTHON_SCRIPT'
+        import mlflow
+        import os
         
-        # Find the latest run ID within the experiment (32-character hex string)
-        # Exclude the parent directory itself
-        RUN_ID=$(find mlruns/$EXPERIMENT_ID -mindepth 1 -maxdepth 1 -type d | head -1 | xargs basename)
-        echo "Run ID: $RUN_ID"
+        mlflow.set_tracking_uri("file:./mlruns")
         
-        # Verify the paths exist
-        echo "Checking paths..."
-        ls -la "mlruns/$EXPERIMENT_ID/" 
-        ls -la "mlruns/$EXPERIMENT_ID/$RUN_ID/"
-        ls -la "mlruns/$EXPERIMENT_ID/$RUN_ID/artifacts/" || echo "No artifacts folder"
+        # Get the experiment
+        experiments = mlflow.search_experiments()
+        if not experiments:
+            print("No experiments found!")
+            exit(1)
         
-        echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
-        echo "experiment_id=$EXPERIMENT_ID" >> $GITHUB_OUTPUT
-        echo "=== Found Run ID: $RUN_ID in Experiment: $EXPERIMENT_ID ==="
+        experiment = experiments[0]
+        print(f"Experiment ID: {experiment.experiment_id}")
+        print(f"Experiment Name: {experiment.name}")
+        
+        # Get the latest run
+        runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id], max_results=1, order_by=["start_time DESC"])
+        
+        if runs.empty:
+            print("No runs found!")
+            exit(1)
+        
+        run_id = runs.iloc[0]['run_id']
+        print(f"Run ID: {run_id}")
+        
+        # Write to output file for GitHub Actions
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"experiment_id={experiment.experiment_id}\n")
+            f.write(f"run_id={run_id}\n")
+        
+        print(f"=== Found Run ID: {run_id} in Experiment: {experiment.experiment_id} ===")
+        PYTHON_SCRIPT
 
     - name: Debug - Check model artifacts
       shell: bash -l {0}
