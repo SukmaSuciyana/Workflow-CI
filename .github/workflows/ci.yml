@@ -82,8 +82,9 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: mlflow-artifacts
-        path: MLProject/mlruns/
+        path: MLProject/mlruns/**/*
         retention-days: 30
+        include-hidden-files: true
 
     - name: Commit and push MLflow artifacts to repo
       run: |
@@ -106,7 +107,14 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: mlflow-artifacts
-        path: MLProject/mlruns/
+        path: artifacts-temp/
+
+    - name: Move artifacts to correct location
+      run: |
+        mkdir -p MLProject/mlruns
+        cp -r artifacts-temp/* MLProject/mlruns/ || cp -r artifacts-temp/MLProject/mlruns/* MLProject/mlruns/
+        echo "Artifacts moved to MLProject/mlruns/"
+        ls -la MLProject/mlruns/
 
     - name: Debug - Verify downloaded artifacts
       shell: bash -l {0}
@@ -118,10 +126,13 @@ jobs:
         ls -la MLProject/mlruns/ || echo "mlruns directory not found!"
         echo ""
         echo "=== Full structure ==="
-        find MLProject/mlruns -type f | head -30 || echo "No files found"
+        find MLProject/mlruns -type f 2>/dev/null | head -50 || echo "No files found"
         echo ""
         echo "=== Looking for experiment directories ==="
-        find MLProject/mlruns -maxdepth 2 -type d
+        find MLProject/mlruns -maxdepth 2 -type d 2>/dev/null
+        echo ""
+        echo "=== Looking for model directories ==="
+        find MLProject/mlruns -type d -name "model" 2>/dev/null
         echo ""
 
     - name: Set up Python
