@@ -27,8 +27,8 @@ env/
 .venv
 
 # MLflow
-mlruns/
-mlartifacts/
+# mlruns/
+# mlartifacts/
 
 # Jupyter Notebook
 .ipynb_checkpoints
