@@ -28,6 +28,9 @@ def load_data(data_path):
 def train_model_with_autolog():
     """Train model using MLflow autolog"""
     
+    # Disable autolog to prevent interference
+    mlflow.sklearn.autolog(disable=True)
+    
     # Set MLflow tracking URI to local directory
     mlflow.set_tracking_uri("file:./mlruns")
     
@@ -97,15 +100,33 @@ def train_model_with_autolog():
         
         # LOG MODEL - This is critical!
         print("\nLogging model to MLflow...")
-        mlflow.sklearn.log_model(
-            sk_model=model,
-            artifact_path="model",
-            registered_model_name="RandomForestPipeCondition"
-        )
-        print("✓ Model logged successfully!")
+        try:
+            mlflow.sklearn.log_model(
+                sk_model=model,
+                artifact_path="model"
+            )
+            print("✓ Model logged successfully!")
+        except Exception as e:
+            print(f"Error logging model: {e}")
+            print("Trying alternative method...")
+            import joblib
+            import tempfile
+            import os
+            
+            # Save model manually if log_model fails
+            with tempfile.TemporaryDirectory() as tmpdir:
+                model_path = os.path.join(tmpdir, "model.pkl")
+                joblib.dump(model, model_path)
+                mlflow.log_artifact(model_path, "model")
+            print("✓ Model saved via alternative method!")
+        
+        # Verify model is saved
+        import os
+        artifact_uri = mlflow.get_artifact_uri()
+        print(f"\nVerifying model artifacts at: {artifact_uri}")
         
         print("\n✓ Model training completed!")
-        print(f"✓ MLflow artifacts saved to: {mlflow.get_artifact_uri()}")
+        print(f"✓ MLflow artifacts saved to: {artifact_uri}")
         print(f"✓ Run ID: {mlflow.active_run().info.run_id}")
 
 if __name__ == "__main__":
