@@ -30,8 +30,8 @@ def train_model():
     """Train model and log with MLflow"""
     
     # Set MLflow tracking URI
-    mlflow.set_tracking_uri("file:./MLProject/mlruns")
-
+    mlflow.set_tracking_uri("file:./mlruns")
+    
     # Set experiment
     mlflow.set_experiment("pipe_condition_classification_basic")
     
