@@ -60,3 +60,5 @@ Thumbs.db
 
 # Temporary files
 *.tmp
+
+.github\workflows\ml-ci-cd.yml
