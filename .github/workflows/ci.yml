@@ -63,8 +63,20 @@ jobs:
       shell: bash -l {0}
       run: |
         cd MLProject
+        echo "=== MLProject/mlruns directory listing ==="
         ls -la mlruns/
+        echo ""
+        echo "=== Looking for model files ==="
         find mlruns/ -name "*.pkl" -o -name "model.pkl" -o -name "MLmodel"
+        echo ""
+        echo "=== Full directory structure ==="
+        find mlruns/ -type d | head -20
+        echo ""
+        echo "=== Checking for model directory ==="
+        find mlruns/ -type d -name "model"
+        echo ""
+        echo "=== All files in mlruns ==="
+        find mlruns/ -type f | head -30
 
     - name: Upload MLflow artifacts
       uses: actions/upload-artifact@v4
@@ -95,6 +107,22 @@ jobs:
       with:
         name: mlflow-artifacts
         path: MLProject/mlruns/
+
+    - name: Debug - Verify downloaded artifacts
+      shell: bash -l {0}
+      run: |
+        echo "=== Checking downloaded artifacts ==="
+        ls -la MLProject/
+        echo ""
+        echo "=== MLProject/mlruns contents ==="
+        ls -la MLProject/mlruns/ || echo "mlruns directory not found!"
+        echo ""
+        echo "=== Full structure ==="
+        find MLProject/mlruns -type f | head -30 || echo "No files found"
+        echo ""
+        echo "=== Looking for experiment directories ==="
+        find MLProject/mlruns -maxdepth 2 -type d
+        echo ""
 
     - name: Set up Python
       uses: actions/setup-python@v4
