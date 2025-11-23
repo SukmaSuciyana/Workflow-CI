@@ -10,6 +10,11 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 import mlflow
 import mlflow.sklearn
 from pathlib import Path
+import sys
+
+# Flush output immediately
+sys.stdout.flush()
+sys.stderr.flush()
 
 def load_data(data_path):
     """Load preprocessed training and testing data"""
@@ -47,8 +52,16 @@ def train_model_with_autolog():
     print(f"Number of features: {X_train.shape[1]}")
     print(f"Classes: {np.unique(y_train)}")
     
+    # Disable autolog to prevent interference
+    print("\nDisabling autolog...")
+    mlflow.sklearn.autolog(disable=True)
+    
     # Start MLflow run (WITHOUT autolog to avoid issues)
+    print("Starting MLflow run...")
     with mlflow.start_run(run_name="RandomForest_Basic_Autolog"):
+        
+        print(f"Run ID: {mlflow.active_run().info.run_id}")
+        print(f"Artifact URI: {mlflow.get_artifact_uri()}")
         
         # Train model
         print("\nTraining Random Forest model...")
@@ -62,28 +75,37 @@ def train_model_with_autolog():
         )
         
         model.fit(X_train, y_train)
+        print("✓ Model training completed!")
         
         # Make predictions
+        print("\nMaking predictions...")
         y_pred = model.predict(X_test)
+        print("✓ Predictions completed!")
         
         # Calculate metrics
+        print("\nCalculating metrics...")
         accuracy = accuracy_score(y_test, y_pred)
         precision = precision_score(y_test, y_pred, average='weighted')
         recall = recall_score(y_test, y_pred, average='weighted')
         f1 = f1_score(y_test, y_pred, average='weighted')
+        print("✓ Metrics calculated!")
         
         # Log parameters
+        print("\nLogging parameters...")
         mlflow.log_param("n_estimators", 100)
         mlflow.log_param("max_depth", 10)
         mlflow.log_param("min_samples_split", 5)
         mlflow.log_param("min_samples_leaf", 2)
         mlflow.log_param("random_state", 42)
+        print("✓ Parameters logged!")
         
         # Log metrics
+        print("\nLogging metrics...")
         mlflow.log_metric("accuracy", accuracy)
         mlflow.log_metric("precision", precision)
         mlflow.log_metric("recall", recall)
         mlflow.log_metric("f1_score", f1)
+        print("✓ Metrics logged!")
         
         print("\n=== Model Performance ===")
         print(f"Accuracy: {accuracy:.4f}")
@@ -99,16 +121,35 @@ def train_model_with_autolog():
         print(confusion_matrix(y_test, y_pred))
         
         # LOG MODEL - This is critical!
-        print("\nLogging model to MLflow...")
+        print("\n" + "="*60)
+        print("LOGGING MODEL TO MLFLOW")
+        print("="*60)
+        sys.stdout.flush()
+        
         try:
+            print(f"Model object type: {type(model)}")
+            print(f"Model parameters: {model.get_params()}")
+            sys.stdout.flush()
+            
             mlflow.sklearn.log_model(
                 sk_model=model,
                 artifact_path="model"
             )
-            print("✓ Model logged successfully!")
+            print("✓✓✓ Model logged successfully! ✓✓✓")
+            sys.stdout.flush()
+            
         except Exception as e:
-            print(f"Error logging model: {e}")
-            print("Trying alternative method...")
+            print(f"❌ Error logging model: {e}")
+            print(f"Error type: {type(e)}")
+            import traceback
+            traceback.print_exc()
+            sys.stdout.flush()
+            
+            print("\n" + "="*60)
+            print("TRYING ALTERNATIVE METHOD")
+            print("="*60)
+            sys.stdout.flush()
+            
             import joblib
             import tempfile
             import os
@@ -116,18 +157,45 @@ def train_model_with_autolog():
             # Save model manually if log_model fails
             with tempfile.TemporaryDirectory() as tmpdir:
                 model_path = os.path.join(tmpdir, "model.pkl")
+                print(f"Saving model to: {model_path}")
                 joblib.dump(model, model_path)
+                print(f"Model saved, file size: {os.path.getsize(model_path)} bytes")
+                
                 mlflow.log_artifact(model_path, "model")
-            print("✓ Model saved via alternative method!")
+                print("✓ Model saved via alternative method!")
+            sys.stdout.flush()
         
         # Verify model is saved
         import os
         artifact_uri = mlflow.get_artifact_uri()
-        print(f"\nVerifying model artifacts at: {artifact_uri}")
+        print("\n" + "="*60)
+        print("VERIFYING MODEL ARTIFACTS")
+        print("="*60)
+        print(f"Artifact URI: {artifact_uri}")
         
-        print("\n✓ Model training completed!")
+        # Check if artifacts directory exists
+        artifacts_path = artifact_uri.replace("file://", "")
+        if os.path.exists(artifacts_path):
+            print(f"✓ Artifacts directory exists!")
+            print(f"Contents:")
+            for root, dirs, files in os.walk(artifacts_path):
+                level = root.replace(artifacts_path, '').count(os.sep)
+                indent = ' ' * 2 * level
+                print(f'{indent}{os.path.basename(root)}/')
+                subindent = ' ' * 2 * (level + 1)
+                for file in files:
+                    print(f'{subindent}{file}')
+        else:
+            print(f"❌ Artifacts directory NOT found!")
+        
+        sys.stdout.flush()
+        
+        print("\n" + "="*60)
+        print("TRAINING COMPLETED")
+        print("="*60)
         print(f"✓ MLflow artifacts saved to: {artifact_uri}")
         print(f"✓ Run ID: {mlflow.active_run().info.run_id}")
+        sys.stdout.flush()
 
 if __name__ == "__main__":
     train_model_with_autolog()
