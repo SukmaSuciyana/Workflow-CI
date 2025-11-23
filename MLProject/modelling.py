@@ -1,6 +1,5 @@
 """
-Basic Model Training with MLflow Autolog
-Kriteria Basic: Melatih model machine learning menggunakan MLflow dengan autolog
+Basic Model Training with MLflow
 """
 
 import pandas as pd
@@ -11,10 +10,7 @@ import mlflow
 import mlflow.sklearn
 from pathlib import Path
 import sys
-
-# Flush output immediately
-sys.stdout.flush()
-sys.stderr.flush()
+import os
 
 def load_data(data_path):
     """Load preprocessed training and testing data"""
@@ -30,19 +26,16 @@ def load_data(data_path):
     return X_train, X_test, y_train, y_test
 
 
-def train_model_with_autolog():
-    """Train model using MLflow autolog"""
+def train_model():
+    """Train model and log with MLflow"""
     
-    # Disable autolog to prevent interference
-    mlflow.sklearn.autolog(disable=True)
-    
-    # Set MLflow tracking URI to local directory
+    # Set MLflow tracking URI
     mlflow.set_tracking_uri("file:./mlruns")
     
-    # Set experiment name
+    # Set experiment
     mlflow.set_experiment("pipe_condition_classification_basic")
     
-    # Load preprocessed data
+    # Load data
     data_path = Path(__file__).parent / 'preprocessed_data_auto'
     X_train, X_test, y_train, y_test = load_data(data_path)
     
@@ -51,20 +44,19 @@ def train_model_with_autolog():
     print(f"Testing samples: {X_test.shape[0]}")
     print(f"Number of features: {X_train.shape[1]}")
     print(f"Classes: {np.unique(y_train)}")
+    sys.stdout.flush()
     
-    # Disable autolog to prevent interference
-    print("\nDisabling autolog...")
-    mlflow.sklearn.autolog(disable=True)
-    
-    # Start MLflow run (WITHOUT autolog to avoid issues)
-    print("Starting MLflow run...")
-    with mlflow.start_run(run_name="RandomForest_Basic_Autolog"):
+    # Start MLflow run
+    with mlflow.start_run(run_name="RandomForest_Model"):
         
-        print(f"Run ID: {mlflow.active_run().info.run_id}")
+        print(f"\nRun ID: {mlflow.active_run().info.run_id}")
         print(f"Artifact URI: {mlflow.get_artifact_uri()}")
+        sys.stdout.flush()
         
         # Train model
         print("\nTraining Random Forest model...")
+        sys.stdout.flush()
+        
         model = RandomForestClassifier(
             n_estimators=100,
             max_depth=10,
@@ -76,11 +68,13 @@ def train_model_with_autolog():
         
         model.fit(X_train, y_train)
         print("✓ Model training completed!")
+        sys.stdout.flush()
         
-        # Make predictions
+        # Predictions
         print("\nMaking predictions...")
         y_pred = model.predict(X_test)
         print("✓ Predictions completed!")
+        sys.stdout.flush()
         
         # Calculate metrics
         print("\nCalculating metrics...")
@@ -89,6 +83,7 @@ def train_model_with_autolog():
         recall = recall_score(y_test, y_pred, average='weighted')
         f1 = f1_score(y_test, y_pred, average='weighted')
         print("✓ Metrics calculated!")
+        sys.stdout.flush()
         
         # Log parameters
         print("\nLogging parameters...")
@@ -98,6 +93,7 @@ def train_model_with_autolog():
         mlflow.log_param("min_samples_leaf", 2)
         mlflow.log_param("random_state", 42)
         print("✓ Parameters logged!")
+        sys.stdout.flush()
         
         # Log metrics
         print("\nLogging metrics...")
@@ -106,96 +102,107 @@ def train_model_with_autolog():
         mlflow.log_metric("recall", recall)
         mlflow.log_metric("f1_score", f1)
         print("✓ Metrics logged!")
+        sys.stdout.flush()
         
-        print("\n=== Model Performance ===")
+        # Print performance
+        print("\n" + "="*60)
+        print("MODEL PERFORMANCE")
+        print("="*60)
         print(f"Accuracy: {accuracy:.4f}")
         print(f"Precision (weighted): {precision:.4f}")
         print(f"Recall (weighted): {recall:.4f}")
         print(f"F1-Score (weighted): {f1:.4f}")
-        
-        print("\n=== Classification Report ===")
+        print("\nClassification Report:")
         print(classification_report(y_test, y_pred, 
                                    target_names=['Good', 'Moderate', 'Critical']))
-        
-        print("\n=== Confusion Matrix ===")
+        print("\nConfusion Matrix:")
         print(confusion_matrix(y_test, y_pred))
+        sys.stdout.flush()
         
-        # LOG MODEL - This is critical!
+        # LOG MODEL - CRITICAL STEP
         print("\n" + "="*60)
-        print("LOGGING MODEL TO MLFLOW")
+        print("LOGGING MODEL")
         print("="*60)
         sys.stdout.flush()
         
         try:
-            print(f"Model object type: {type(model)}")
-            print(f"Model parameters: {model.get_params()}")
-            sys.stdout.flush()
-            
+            # Method 1: Use mlflow.sklearn.log_model
             mlflow.sklearn.log_model(
                 sk_model=model,
-                artifact_path="model"
+                artifact_path="model",
+                conda_env=None,
+                serialization_format=mlflow.sklearn.SERIALIZATION_FORMAT_CLOUDPICKLE
             )
-            print("✓✓✓ Model logged successfully! ✓✓✓")
+            print("✓✓✓ Model logged successfully with mlflow.sklearn.log_model! ✓✓✓")
             sys.stdout.flush()
             
         except Exception as e:
-            print(f"❌ Error logging model: {e}")
-            print(f"Error type: {type(e)}")
-            import traceback
-            traceback.print_exc()
+            print(f"❌ Method 1 failed: {e}")
+            print("\nTrying Method 2: Direct pickle save...")
             sys.stdout.flush()
             
-            print("\n" + "="*60)
-            print("TRYING ALTERNATIVE METHOD")
-            print("="*60)
-            sys.stdout.flush()
-            
-            import joblib
-            import tempfile
-            import os
-            
-            # Save model manually if log_model fails
-            with tempfile.TemporaryDirectory() as tmpdir:
-                model_path = os.path.join(tmpdir, "model.pkl")
-                print(f"Saving model to: {model_path}")
-                joblib.dump(model, model_path)
-                print(f"Model saved, file size: {os.path.getsize(model_path)} bytes")
+            try:
+                import pickle
+                import tempfile
                 
-                mlflow.log_artifact(model_path, "model")
-                print("✓ Model saved via alternative method!")
-            sys.stdout.flush()
+                # Create temp directory for model
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    model_file = os.path.join(tmpdir, "model.pkl")
+                    
+                    # Save model with pickle
+                    with open(model_file, 'wb') as f:
+                        pickle.dump(model, f)
+                    
+                    print(f"Model saved to {model_file}")
+                    print(f"File size: {os.path.getsize(model_file)} bytes")
+                    
+                    # Log as artifact
+                    mlflow.log_artifact(model_file, artifact_path="model")
+                    
+                print("✓✓✓ Model saved with Method 2! ✓✓✓")
+                sys.stdout.flush()
+                
+            except Exception as e2:
+                print(f"❌ Method 2 also failed: {e2}")
+                print("\nERROR: Could not save model!")
+                sys.stdout.flush()
+                raise
         
-        # Verify model is saved
-        import os
-        artifact_uri = mlflow.get_artifact_uri()
+        # Verify artifacts
         print("\n" + "="*60)
-        print("VERIFYING MODEL ARTIFACTS")
+        print("VERIFYING ARTIFACTS")
         print("="*60)
-        print(f"Artifact URI: {artifact_uri}")
         
-        # Check if artifacts directory exists
-        artifacts_path = artifact_uri.replace("file://", "")
-        if os.path.exists(artifacts_path):
-            print(f"✓ Artifacts directory exists!")
-            print(f"Contents:")
-            for root, dirs, files in os.walk(artifacts_path):
-                level = root.replace(artifacts_path, '').count(os.sep)
-                indent = ' ' * 2 * level
+        artifact_uri = mlflow.get_artifact_uri()
+        artifact_path = artifact_uri.replace("file://", "")
+        
+        print(f"Artifact URI: {artifact_uri}")
+        print(f"Artifact Path: {artifact_path}")
+        
+        if os.path.exists(artifact_path):
+            print("\n✓ Artifacts directory exists!")
+            print("\nDirectory contents:")
+            for root, dirs, files in os.walk(artifact_path):
+                level = root.replace(artifact_path, '').count(os.sep)
+                indent = '  ' * level
                 print(f'{indent}{os.path.basename(root)}/')
-                subindent = ' ' * 2 * (level + 1)
+                subindent = '  ' * (level + 1)
                 for file in files:
-                    print(f'{subindent}{file}')
+                    file_path = os.path.join(root, file)
+                    file_size = os.path.getsize(file_path)
+                    print(f'{subindent}{file} ({file_size} bytes)')
         else:
-            print(f"❌ Artifacts directory NOT found!")
+            print(f"\n❌ Artifacts directory NOT found at: {artifact_path}")
         
         sys.stdout.flush()
         
         print("\n" + "="*60)
         print("TRAINING COMPLETED")
         print("="*60)
-        print(f"✓ MLflow artifacts saved to: {artifact_uri}")
         print(f"✓ Run ID: {mlflow.active_run().info.run_id}")
+        print(f"✓ Artifacts saved to: {artifact_uri}")
+        print("="*60)
         sys.stdout.flush()
 
 if __name__ == "__main__":
-    train_model_with_autolog()
+    train_model()
