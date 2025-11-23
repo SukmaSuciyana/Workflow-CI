@@ -45,7 +45,7 @@ def train_model_with_autolog():
     print(f"Classes: {np.unique(y_train)}")
     
     # Enable autolog for sklearn
-    mlflow.sklearn.autolog()
+    mlflow.sklearn.autolog(log_models=True)
     
     # Start MLflow run
     with mlflow.start_run(run_name="RandomForest_Basic_Autolog"):
@@ -84,6 +84,10 @@ def train_model_with_autolog():
         
         print("\n=== Confusion Matrix ===")
         print(confusion_matrix(y_test, y_pred))
+        
+        # Explicitly log model to ensure it's saved
+        print("\nLogging model...")
+        mlflow.sklearn.log_model(model, "model")
         
         print("\n✓ Model training completed!")
         print(f"✓ MLflow artifacts saved to: {mlflow.get_artifact_uri()}")
