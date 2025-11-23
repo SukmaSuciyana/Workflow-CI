@@ -138,7 +138,7 @@ def train_model():
         print("="*60)
         sys.stdout.flush()
         
-        # Method: Use mlflow.sklearn.log_model with explicit input_example
+        # Method: Use mlflow.sklearn.log_model with proper parameters
         print("\nLogging model with mlflow.sklearn.log_model...")
         sys.stdout.flush()
         
@@ -146,29 +146,52 @@ def train_model():
             # Create input example from first row of test data
             input_example = X_test.iloc[:1]
             
-            mlflow.sklearn.log_model(
+            # Log model - use 'artifact_path' for compatibility
+            model_info = mlflow.sklearn.log_model(
                 sk_model=model,
                 artifact_path="model",
-                input_example=input_example,
-                signature=mlflow.models.infer_signature(X_train, y_train)
+                input_example=input_example
             )
-            print("✓✓✓ Model logged successfully with mlflow.sklearn.log_model! ✓✓✓")
+            print(f"✓ Model logged to artifact_path: model")
+            print(f"✓ Model info: {model_info}")
             sys.stdout.flush()
+            
+            # Force flush to disk - sometimes MLflow doesn't write immediately
+            import time
+            time.sleep(2)
             
             # Verify the model was actually saved
             artifact_uri = mlflow.get_artifact_uri()
             artifact_path = artifact_uri.replace("file://", "")
             model_dir = os.path.join(artifact_path, "model")
-            mlmodel_file = os.path.join(model_dir, "MLmodel")
             
-            if os.path.exists(mlmodel_file):
-                print(f"✓ VERIFIED: MLmodel file exists at {mlmodel_file}")
-                with open(mlmodel_file, 'r') as f:
-                    print("MLmodel content preview:")
-                    print(f.read()[:500])
-            else:
+            print(f"\nVerifying model directory: {model_dir}")
+            
+            # Check if directory exists
+            if not os.path.exists(model_dir):
+                print(f"❌ Model directory not found: {model_dir}")
+                print(f"Checking parent directory: {artifact_path}")
+                if os.path.exists(artifact_path):
+                    print("Parent directory contents:")
+                    for item in os.listdir(artifact_path):
+                        print(f"  - {item}")
+                raise Exception(f"Model directory not created at {model_dir}")
+            
+            print(f"✓ Model directory exists!")
+            print("Directory contents:")
+            for item in os.listdir(model_dir):
+                item_path = os.path.join(model_dir, item)
+                size = os.path.getsize(item_path) if os.path.isfile(item_path) else 0
+                print(f"  - {item} ({size} bytes)")
+            
+            # Check for MLmodel file specifically
+            mlmodel_file = os.path.join(model_dir, "MLmodel")
+            if not os.path.exists(mlmodel_file):
+                print(f"❌ MLmodel file not found at {mlmodel_file}")
                 raise Exception(f"MLmodel file NOT created at {mlmodel_file}")
             
+            print(f"✓ VERIFIED: MLmodel file exists!")
+            print("\n✓✓✓ Model logged and verified successfully! ✓✓✓")
             sys.stdout.flush()
             
         except Exception as e:
