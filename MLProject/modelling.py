@@ -44,10 +44,7 @@ def train_model_with_autolog():
     print(f"Number of features: {X_train.shape[1]}")
     print(f"Classes: {np.unique(y_train)}")
     
-    # Enable autolog for sklearn
-    mlflow.sklearn.autolog(log_models=True)
-    
-    # Start MLflow run
+    # Start MLflow run (WITHOUT autolog to avoid issues)
     with mlflow.start_run(run_name="RandomForest_Basic_Autolog"):
         
         # Train model
@@ -66,11 +63,24 @@ def train_model_with_autolog():
         # Make predictions
         y_pred = model.predict(X_test)
         
-        # Calculate metrics (autolog will also log these)
+        # Calculate metrics
         accuracy = accuracy_score(y_test, y_pred)
         precision = precision_score(y_test, y_pred, average='weighted')
         recall = recall_score(y_test, y_pred, average='weighted')
         f1 = f1_score(y_test, y_pred, average='weighted')
+        
+        # Log parameters
+        mlflow.log_param("n_estimators", 100)
+        mlflow.log_param("max_depth", 10)
+        mlflow.log_param("min_samples_split", 5)
+        mlflow.log_param("min_samples_leaf", 2)
+        mlflow.log_param("random_state", 42)
+        
+        # Log metrics
+        mlflow.log_metric("accuracy", accuracy)
+        mlflow.log_metric("precision", precision)
+        mlflow.log_metric("recall", recall)
+        mlflow.log_metric("f1_score", f1)
         
         print("\n=== Model Performance ===")
         print(f"Accuracy: {accuracy:.4f}")
@@ -85,9 +95,14 @@ def train_model_with_autolog():
         print("\n=== Confusion Matrix ===")
         print(confusion_matrix(y_test, y_pred))
         
-        # Explicitly log model to ensure it's saved
-        print("\nLogging model...")
-        mlflow.sklearn.log_model(model, "model")
+        # LOG MODEL - This is critical!
+        print("\nLogging model to MLflow...")
+        mlflow.sklearn.log_model(
+            sk_model=model,
+            artifact_path="model",
+            registered_model_name="RandomForestPipeCondition"
+        )
+        print("✓ Model logged successfully!")
         
         print("\n✓ Model training completed!")
         print(f"✓ MLflow artifacts saved to: {mlflow.get_artifact_uri()}")
