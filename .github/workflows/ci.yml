@@ -48,8 +48,14 @@ jobs:
         
     - name: Verify data files
       run: |
-        echo "Checking for data files..."
-        ls -la preprocessed_data_auto/
+        echo "Checking for data files in root directory..."
+        ls -la
+        echo ""
+        echo "Checking preprocessed_data_auto directory..."
+        ls -la preprocessed_data_auto/ || echo "Data directory not found in root"
+        echo ""
+        echo "Checking MLProject directory..."
+        ls -la MLProject/
         
     - name: Train ML Model
       run: |
