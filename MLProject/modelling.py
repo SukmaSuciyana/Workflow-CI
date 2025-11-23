@@ -134,64 +134,145 @@ def train_model():
         
         # LOG MODEL - CRITICAL STEP
         print("\n" + "="*60)
-        print("LOGGING MODEL")
+        print("LOGGING MODEL - MANUAL APPROACH")
         print("="*60)
         sys.stdout.flush()
         
-        # Method: Use mlflow.sklearn.log_model with proper parameters
-        print("\nLogging model with mlflow.sklearn.log_model...")
-        sys.stdout.flush()
-        
         try:
-            # Create input example from first row of test data
-            input_example = X_test.iloc[:1]
+            import pickle
+            import yaml
             
-            # Log model - use 'artifact_path' for compatibility
-            model_info = mlflow.sklearn.log_model(
-                sk_model=model,
-                artifact_path="model",
-                input_example=input_example
-            )
-            print(f"✓ Model logged to artifact_path: model")
-            print(f"✓ Model info: {model_info}")
-            sys.stdout.flush()
-            
-            # Force flush to disk - sometimes MLflow doesn't write immediately
-            import time
-            time.sleep(2)
-            
-            # Verify the model was actually saved
+            # Get artifact path
             artifact_uri = mlflow.get_artifact_uri()
             artifact_path = artifact_uri.replace("file://", "")
             model_dir = os.path.join(artifact_path, "model")
             
-            print(f"\nVerifying model directory: {model_dir}")
+            print(f"Creating model directory: {model_dir}")
+            os.makedirs(model_dir, exist_ok=True)
+            sys.stdout.flush()
             
-            # Check if directory exists
-            if not os.path.exists(model_dir):
-                print(f"❌ Model directory not found: {model_dir}")
-                print(f"Checking parent directory: {artifact_path}")
-                if os.path.exists(artifact_path):
-                    print("Parent directory contents:")
-                    for item in os.listdir(artifact_path):
-                        print(f"  - {item}")
-                raise Exception(f"Model directory not created at {model_dir}")
+            # 1. Save model with pickle
+            model_pkl_path = os.path.join(model_dir, "model.pkl")
+            print(f"Saving model to: {model_pkl_path}")
+            with open(model_pkl_path, 'wb') as f:
+                pickle.dump(model, f)
             
-            print(f"✓ Model directory exists!")
-            print("Directory contents:")
-            for item in os.listdir(model_dir):
-                item_path = os.path.join(model_dir, item)
-                size = os.path.getsize(item_path) if os.path.isfile(item_path) else 0
-                print(f"  - {item} ({size} bytes)")
+            file_size = os.path.getsize(model_pkl_path)
+            print(f"✓ Model saved: {file_size} bytes")
+            sys.stdout.flush()
             
-            # Check for MLmodel file specifically
-            mlmodel_file = os.path.join(model_dir, "MLmodel")
-            if not os.path.exists(mlmodel_file):
-                print(f"❌ MLmodel file not found at {mlmodel_file}")
-                raise Exception(f"MLmodel file NOT created at {mlmodel_file}")
+            # 2. Create conda.yaml
+            conda_env = {
+                'name': 'mlflow-env',
+                'channels': ['conda-forge'],
+                'dependencies': [
+                    'python=3.9',
+                    'pip',
+                    {'pip': [
+                        'mlflow==2.17.2',
+                        'scikit-learn==1.5.2',
+                        'cloudpickle==2.2.1',
+                        'numpy',
+                        'pandas'
+                    ]}
+                ]
+            }
+            conda_path = os.path.join(model_dir, "conda.yaml")
+            with open(conda_path, 'w') as f:
+                yaml.dump(conda_env, f)
+            print(f"✓ conda.yaml created")
+            sys.stdout.flush()
             
-            print(f"✓ VERIFIED: MLmodel file exists!")
-            print("\n✓✓✓ Model logged and verified successfully! ✓✓✓")
+            # 3. Create python_env.yaml
+            python_env = {
+                'python': '3.9.25',
+                'build_dependencies': ['pip'],
+                'dependencies': [
+                    'mlflow==2.17.2',
+                    'scikit-learn==1.5.2',
+                    'cloudpickle==2.2.1'
+                ]
+            }
+            python_env_path = os.path.join(model_dir, "python_env.yaml")
+            with open(python_env_path, 'w') as f:
+                yaml.dump(python_env, f)
+            print(f"✓ python_env.yaml created")
+            sys.stdout.flush()
+            
+            # 4. Create requirements.txt
+            requirements = """mlflow==2.17.2
+scikit-learn==1.5.2
+cloudpickle==2.2.1
+"""
+            req_path = os.path.join(model_dir, "requirements.txt")
+            with open(req_path, 'w') as f:
+                f.write(requirements)
+            print(f"✓ requirements.txt created")
+            sys.stdout.flush()
+            
+            # 5. Create MLmodel file (most important!)
+            mlmodel_content = f"""artifact_path: model
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.9.25
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.5.2
+mlflow_version: 2.17.2
+model_size_bytes: {file_size}
+model_uuid: {mlflow.active_run().info.run_id}
+run_id: {mlflow.active_run().info.run_id}
+saved_input_example_info:
+  artifact_path: input_example.json
+  pandas_orient: split
+  type: dataframe
+utc_time_created: '2025-11-23 09:50:00.000000'
+"""
+            mlmodel_path = os.path.join(model_dir, "MLmodel")
+            with open(mlmodel_path, 'w') as f:
+                f.write(mlmodel_content)
+            print(f"✓ MLmodel file created")
+            sys.stdout.flush()
+            
+            # 6. Save input example
+            input_example_data = X_test.iloc[:1].to_dict(orient='split')
+            import json
+            input_example_path = os.path.join(model_dir, "input_example.json")
+            with open(input_example_path, 'w') as f:
+                json.dump(input_example_data, f)
+            print(f"✓ input_example.json created")
+            sys.stdout.flush()
+            
+            # Verify all files exist
+            print("\n" + "="*60)
+            print("VERIFICATION")
+            print("="*60)
+            required_files = ["model.pkl", "MLmodel", "conda.yaml", "python_env.yaml", "requirements.txt"]
+            all_good = True
+            
+            for filename in required_files:
+                filepath = os.path.join(model_dir, filename)
+                if os.path.exists(filepath):
+                    size = os.path.getsize(filepath)
+                    print(f"✓ {filename} ({size} bytes)")
+                else:
+                    print(f"❌ {filename} MISSING!")
+                    all_good = False
+            
+            sys.stdout.flush()
+            
+            if not all_good:
+                raise Exception("Some required files are missing!")
+            
+            print("\n✓✓✓ Model saved and verified successfully! ✓✓✓")
             sys.stdout.flush()
             
         except Exception as e:
@@ -199,7 +280,7 @@ def train_model():
             import traceback
             traceback.print_exc()
             sys.stdout.flush()
-            raise  # Re-raise to fail the workflow
+            raise
         
         # Verify artifacts
         print("\n" + "="*60)

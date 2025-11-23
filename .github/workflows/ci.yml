@@ -44,7 +44,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install mlflow scikit-learn pandas numpy joblib
+        pip install mlflow scikit-learn pandas numpy joblib pyyaml
         
     - name: Verify data files
       run: |
